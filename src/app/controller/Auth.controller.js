@@ -84,16 +84,14 @@ router.put('/:userId', async (req, res) => {
   try {
     const { name, email } = req.body
 
-    const user = await User.findByIdAndUpdate(req.params.userId, {
+    await User.findByIdAndUpdate(req.params.userId, {
       name,
       email
     })
 
-    await user.save()
-
     return res.status(200).send({
       message: 'Usuário alterado com sucesso!',
-      data: user,
+      data: [],
       success: true
     })
   } catch (err) {
