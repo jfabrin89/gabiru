@@ -1,8 +1,10 @@
 const express = require('express')
 const authMiddlewate = require('../middleware/auth')
 
-const Team = require('../models/team.model')
 const router = express.Router()
+
+const Team = require('../models/team.model')
+const campeonatoBrasileiro = require('campeonato-brasileiro')
 
 router.use(authMiddlewate)
 
@@ -26,6 +28,47 @@ router.post('/', async (req, res) => {
     })
   } catch (err) {
     console.log(err)
+    return res.status(400).send({
+      message: 'Erro ao cadastrar time!',
+      data: err,
+      success: false
+    })
+  }
+})
+
+router.post('/import', async (req, res) => {
+  const { division, year } = req.body
+  const listTeams = await campeonatoBrasileiro.jogos(parseInt(year), division.toLowerCase()).then(results => {
+    var teamRound1 = results.filter(val => parseInt(val.rodada) === 1)
+    var list = []
+    teamRound1.forEach(element => {
+      list.push(element.visitante)
+      list.push(element.mandante)
+    })
+    return list
+  }, function (err) {
+    return err
+  })
+
+  try {
+    if (!listTeams) {
+      return res.status(400).send({
+        message: 'Erro ao buscar lista de times!',
+        data: [],
+        success: false
+      })
+    }
+
+    await listTeams.forEach(element => {
+      Team.create({name: element})
+    })
+
+    return res.status(200).send({
+      message: 'Times importados com sucesso!',
+      data: team,
+      success: true
+    })
+  } catch (err) {
     return res.status(400).send({
       message: 'Erro ao cadastrar time!',
       data: err,

@@ -7,23 +7,22 @@ const User = require('../models/user.model')
 const Team = require('../models/team.model')
 const router = express.Router()
 
-async function lotteryList (lottery, users, rounds) {
+async function lotteryList (user, rounds) {
   var listLottery = []
-  for (var counter = 0; counter < users.length; counter++) {
+  for (var counter = 0; counter < user.length; counter++) {
     var itemSort = {}
-    var user = users[counter]
     var listTeam = await Team.find()
-    listTeam.map(element => element._id)
-
-    console.log('---------------------------------------')
-    console.log(user.name)
 
     if (rounds > 1) {
-      var round = rounds - 1
-      var teamPrev = lottery.filter(element => (element.round === round))
-      console.log(teamPrev.user)
-      var positionPrev = listTeam.indexOf(`${teamPrev.id}`)
-      listTeam.splice(positionPrev, 1)
+      const roundPrevious = rounds - 1
+      var teamPrev = await Lottery.find({ 'round': roundPrevious, 'user': user[counter] }).populate('user').populate('team')
+      var list = listTeam
+      listTeam = []
+      list.forEach(element => {
+        if (element.id !== teamPrev[0].team.id) {
+          listTeam.push(element)
+        }
+      })
     }
     do {
       var teamSort = undefined
@@ -39,10 +38,8 @@ async function lotteryList (lottery, users, rounds) {
     }
     while (teamSort === undefined)
 
-    console.log(teamSort.name)
-    itemSort.user = user
+    itemSort.user = user[counter]
     itemSort.team = teamSort
-    itemSort.round = rounds
 
     listLottery.push(itemSort)
   }
@@ -53,14 +50,25 @@ async function lotteryList (lottery, users, rounds) {
 router.post('/', async (req, res) => {
   const { round } = req.body
   try {
+    // Valida se existe a rodada anterior...
+    // Caso não exista, ele não permite sortear a atual rodada
+    if (round > 1) {
+      const roundPrevious = round - 1
+      const lotteryPrevious = await Lottery.find({ 'round': roundPrevious})
+      if (lotteryPrevious.length === 0){
+        return res.status(400).send({
+          message: `Você não sorteou a rodada anterior (${roundPrevious})!`,
+          data: [],
+          success: false
+        })
+      }
+    }
+
     const user = await User.find()
-    const lottery = await Lottery.find()
     var itemLottery = []
-    const list = await lotteryList(lottery, user, round)
+    const list = await lotteryList(user, round)
     list.forEach(element => {
-      /* console.log('----------------------------------------------------------')
-      console.log(element)*/
-      const create = Lottery.create(element)
+      const create = Lottery.create({ ...req.body, user: element.user, team: element.team})
       itemLottery.push(create)
     })
 
@@ -70,7 +78,6 @@ router.post('/', async (req, res) => {
       success: true
     })
   } catch (err) {
-    console.log(err)
     return res.status(400).send({
       message: 'Erro ao cadastrar rodada!',
       data: err,
@@ -81,65 +88,41 @@ router.post('/', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
-    const lottery = await Lottery.find()
+    const lottery = await Lottery.find().populate('user').populate('team')
     res.status(200).send({
-      message: 'Usuários listados com sucesso!',
+      message: 'Sorteio listados com sucesso!',
       data: lottery,
       success: true
     })
   } catch (err) {
     res.status(400).send({
-      message: 'Erro ao tentar buscar usuários, tente novamente',
+      message: 'Erro ao tentar buscar Sorteio, tente novamente',
       data: err,
       success: false
     })
   }
 })
 
-router.get('/:lotteryId', async (req, res) => {
+router.get('/:round', async (req, res) => {
   try {
-    const lottery = await Lottery.findById(req.params.lotteryId)
+    const lottery = await Lottery.find({ round: req.params.round }).populate('user').populate('team')
     res.status(200).send({
-      message: 'Usuário listado com sucesso!',
+      message: `Rodada ${req.params.round} listada com sucesso!`,
       data: lottery,
       success: true
     })
   } catch (err) {
     res.status(400).send({
-      message: 'Erro ao tentar buscar usuário, tente novamente',
+      message: 'Erro ao tentar buscar rodada, tente novamente',
       data: err,
       success: false
     })
   }
 })
 
-router.put('/:lotteryId', async (req, res) => {
+router.delete('/:round', async (req, res) => {
   try {
-    const { name, email } = req.body
-
-    await Lottery.findByIdAndUpdate(req.params.lotteryId, {
-      name,
-      email
-    })
-
-    return res.status(200).send({
-      message: 'Usuário alterado com sucesso!',
-      data: [],
-      success: true
-    })
-  } catch (err) {
-    console.log(err)
-    return res.status(400).send({
-      message: 'Erro ao alterar usuário!',
-      data: err,
-      success: false
-    })
-  }
-})
-
-router.delete('/:lotteryId', async (req, res) => {
-  try {
-    await Lottery.findByIdAndRemove(req.params.lotteryId)
+    await Lottery.deleteMany({ round: req.params.round })
     res.status(200).send({
       message: 'Usuário removido com sucesso!',
       data: [],
